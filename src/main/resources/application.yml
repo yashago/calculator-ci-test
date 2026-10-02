@@ -1,0 +1,26 @@
+spring:
+  application:
+    name: calculator
+
+server:
+  shutdown: graceful
+
+app:
+  # Injected at deploy time (image tag); shown by /api/v1/version
+  version: ${APP_VERSION:dev}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  metrics:
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+    tags:
+      application: ${spring.application.name}
