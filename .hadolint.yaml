@@ -1,0 +1,4 @@
+# Fail on warnings and above. Add an exception only with a written reason, e.g.:
+# ignored:
+#   - DL3008  # reason: ...
+failure-threshold: warning

@@ -1,0 +1,229 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: ['**.md']
+  pull_request:
+    branches: [main]
+    paths-ignore: ['**.md']
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  IMAGE: calculator
+
+jobs:
+  secrets-scan:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      # Unit + integration tests, merged JaCoCo report, coverage gate (see pom.xml)
+      - run: ./mvnw -B verify
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: test-reports
+          path: |
+            target/surefire-reports/
+            target/failsafe-reports/
+          if-no-files-found: ignore
+      - name: Upload coverage report
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: coverage
+          path: target/site/jacoco-merged/
+      # Compiled classes and reports, so the sonar job can analyse without rebuilding
+      - name: Upload build output
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: build-output
+          retention-days: 1
+          path: |
+            target/classes/
+            target/test-classes/
+            target/surefire-reports/
+            target/failsafe-reports/
+            target/site/jacoco-merged/jacoco.xml
+
+  sonar:
+    needs: build-test
+    runs-on: ubuntu-latest
+    env:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      FORK_PR: ${{ github.event.pull_request.head.repo.fork == true }}
+    steps:
+      # Fork PRs get no secrets, so skip there; anywhere else a missing token is a setup error
+      - name: Check SONAR_TOKEN
+        if: env.SONAR_TOKEN == '' && env.FORK_PR != 'true'
+        run: |
+          echo "::error::SONAR_TOKEN secret is not set"
+          exit 1
+      - if: env.SONAR_TOKEN != ''
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # full history for blame and new-code detection
+      - if: env.SONAR_TOKEN != ''
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - if: env.SONAR_TOKEN != ''
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: build-output
+          path: target/
+      - if: env.SONAR_TOKEN != ''
+        run: ./mvnw -B sonar:sonar -Dsonar.qualitygate.wait=true
+
+  dependency-scan:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Trivy fs (report)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln
+          format: sarif
+          output: trivy-fs.sarif
+          exit-code: '0'
+      - name: Upload Trivy fs SARIF
+        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        continue-on-error: true # Security tab needs a public repo or GitHub Advanced Security
+        with:
+          sarif_file: trivy-fs.sarif
+          category: trivy-fs
+      - name: Trivy fs (gate)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: '1'
+          trivyignores: .trivyignore
+          skip-setup-trivy: true
+
+  image:
+    needs: [build-test, sonar, dependency-scan]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Compute image tag
+        env:
+          SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: echo "TAG=sha-${SHA::7}" >> "$GITHUB_ENV"
+
+      - name: Lint Dockerfile
+        uses: hadolint/hadolint-action@06be81baf89a55ffd0e24b8f04a4185738dd3387 # v3.5.0
+        with:
+          dockerfile: Dockerfile
+          config: .hadolint.yaml
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      # Build into the local daemon only; nothing is pushed until it passes the scans
+      - name: Build image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          load: true
+          push: false
+          tags: ${{ env.IMAGE }}:${{ env.TAG }}
+          build-args: APP_VERSION=${{ env.TAG }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Trivy image (report)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ env.IMAGE }}:${{ env.TAG }}
+          scanners: vuln,secret,misconfig
+          format: sarif
+          output: trivy-image.sarif
+          exit-code: '0'
+      - name: Upload Trivy image SARIF
+        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        continue-on-error: true
+        with:
+          sarif_file: trivy-image.sarif
+          category: trivy-image
+      - name: Trivy image (gate)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ env.IMAGE }}:${{ env.TAG }}
+          scanners: vuln,secret,misconfig
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: '1'
+          trivyignores: .trivyignore
+          skip-setup-trivy: true
+
+      # Second vulnerability database as a cross-check
+      - name: Grype image (gate)
+        id: grype
+        uses: anchore/scan-action@27805bf3b4e84b4a5c980df22ed233c00390a439 # v7.4.2
+        with:
+          image: ${{ env.IMAGE }}:${{ env.TAG }}
+          only-fixed: true
+          severity-cutoff: high
+          fail-build: true
+      - name: Upload Grype SARIF
+        if: always() && steps.grype.outputs.sarif != ''
+        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        continue-on-error: true
+        with:
+          sarif_file: ${{ steps.grype.outputs.sarif }}
+          category: grype-image
+
+      - name: Generate SBOM
+        uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
+        with:
+          image: ${{ env.IMAGE }}:${{ env.TAG }}
+          format: spdx-json
+          artifact-name: sbom-${{ env.TAG }}.spdx.json
+          upload-release-assets: false
+
+      # The publish job (step 3) loads this exact scanned image instead of rebuilding
+      - name: Save image
+        run: docker save "$IMAGE:$TAG" -o image.tar
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: image-tar
+          path: image.tar
+          retention-days: 1
+          compression-level: 0
