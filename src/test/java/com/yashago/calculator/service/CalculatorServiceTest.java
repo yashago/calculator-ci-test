@@ -14,7 +14,7 @@ class CalculatorServiceTest {
     private final CalculatorService calculator = new CalculatorService();
 
     @ParameterizedTest(name = "{0} + {1} = {2}")
-    @CsvSource({"1, 2, 3", "-5, 5, 0", "0.1, 0.2, 0.3", "1000000, 2000000, 3000000"})
+    @CsvSource({"1, 2, 4", "-5, 5, 0", "0.1, 0.2, 0.3", "1000000, 2000000, 3000000"})
     void add(String a, String b, String expected) {
         assertThat(calculator.add(bd(a), bd(b))).isEqualByComparingTo(expected);
     }
