@@ -108,11 +108,20 @@ jobs:
       security-events: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      # Resolve the real runtime jars (incl. transitive deps managed by the Spring Boot BOM);
+      # scanning pom.xml alone misses them
+      - name: Resolve runtime dependencies
+        run: ./mvnw -B -q dependency:copy-dependencies -DincludeScope=runtime -DoutputDirectory=target/dependency
       - name: Trivy fs (report)
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           scan-type: fs
-          scan-ref: .
+          scan-ref: target/dependency
           scanners: vuln
           format: sarif
           output: trivy-fs.sarif
@@ -127,7 +136,7 @@ jobs:
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           scan-type: fs
-          scan-ref: .
+          scan-ref: target/dependency
           scanners: vuln
           severity: HIGH,CRITICAL
           ignore-unfixed: true
