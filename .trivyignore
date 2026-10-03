@@ -1,0 +1,4 @@
+# Accepted vulnerabilities - one CVE id per line, each with a reason and a review date.
+# Example:
+#   # commons-foo: not reachable from our code paths. Review by 2026-12-31.
+#   CVE-2026-00000
