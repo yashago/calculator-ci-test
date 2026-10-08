@@ -1,3 +1,9 @@
+# Accepted risks (review by the expiry date):
+# AWS-0040 public API endpoint: restricted to admin_cidrs; fully private needs a VPN or bastion.
+# AWS-0104 unrestricted node egress: nodes pull images from ECR/Docker Hub/quay.io and call
+#          AWS APIs and GitHub; locking it down needs VPC endpoints plus an egress proxy.
+#trivy:ignore:AWS-0040:exp:2027-04-01
+#trivy:ignore:AWS-0104:exp:2027-04-01
 module "eks" {
   source  = "terraform-aws-modules/eks/aws"
   version = "~> 21.26"

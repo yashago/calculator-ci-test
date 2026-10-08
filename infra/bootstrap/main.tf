@@ -38,6 +38,9 @@ resource "aws_s3_bucket_versioning" "tfstate" {
   }
 }
 
+# Accepted: SSE-S3 instead of a customer-managed KMS key. The bucket is private and versioned;
+# a CMK adds cost and key-policy upkeep for no real gain in a single-user demo account.
+#trivy:ignore:AWS-0132:exp:2027-04-01
 resource "aws_s3_bucket_server_side_encryption_configuration" "tfstate" {
   bucket = aws_s3_bucket.tfstate.id
   rule {
