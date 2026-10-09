@@ -23,6 +23,7 @@ module "eks" {
   addons = {
     coredns                = {}
     kube-proxy             = {}
+    metrics-server         = {} # CPU/memory metrics for the HPA
     eks-pod-identity-agent = { before_compute = true }
     vpc-cni = {
       before_compute = true
