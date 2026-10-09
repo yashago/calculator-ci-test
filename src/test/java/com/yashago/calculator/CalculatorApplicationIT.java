@@ -32,7 +32,7 @@ class CalculatorApplicationIT {
     @Test
     void multiplyOverHttp() {
         String body = client.get().uri("/api/v1/multiply?a=6&b=7").retrieve().body(String.class);
-        assertThat(body).contains("\"result\":42");
+        assertThat(body).contains("\"result\":42", "\"version\":\"1\"");
     }
 
     @Test
