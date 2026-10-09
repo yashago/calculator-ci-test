@@ -315,3 +315,65 @@ jobs:
             echo "  --certificate-oidc-issuer https://token.actions.githubusercontent.com"
             echo "\`\`\`"
           } >> "$GITHUB_STEP_SUMMARY"
+
+  # Deploy to dev = commit the new tag to the GitOps repo; Argo CD does the rest
+  update-gitops:
+    needs: [image, publish]
+    runs-on: ubuntu-latest
+    env:
+      TAG: ${{ needs.image.outputs.tag }}
+      IMAGE_REF: ${{ needs.publish.outputs.image-ref }}
+      KUSTOMIZE_VERSION: v5.8.3
+      KUSTOMIZE_SHA256: cb9e31198d3f63b44848bd0afc4c8efc56e6cfef9c93a4a39a211940e6decd61
+    steps:
+      # Short-lived token from the GitHub App, valid only for the gitops repo
+      - id: app
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ secrets.GITOPS_APP_CLIENT_ID }}
+          private-key: ${{ secrets.GITOPS_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: calculator-gitops
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ github.repository_owner }}/calculator-gitops
+          token: ${{ steps.app.outputs.token }}
+          path: gitops
+
+      - name: Install kustomize
+        run: |
+          curl -fsSL --proto '=https' --tlsv1.2 -o kustomize.tar.gz "https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2F${KUSTOMIZE_VERSION}/kustomize_${KUSTOMIZE_VERSION}_linux_amd64.tar.gz"
+          echo "${KUSTOMIZE_SHA256}  kustomize.tar.gz" | sha256sum -c -
+          tar -xzf kustomize.tar.gz kustomize
+          sudo install kustomize /usr/local/bin/
+
+      - name: Set dev image tag
+        working-directory: gitops/overlays/dev
+        run: |
+          REPO="${IMAGE_REF%@*}"
+          kustomize edit set image "calculator=${REPO}:${TAG}"
+          git diff
+
+      - name: Commit and push
+        working-directory: gitops
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          APP_SLUG: ${{ steps.app.outputs.app-slug }}
+        run: |
+          if git diff --quiet; then
+            echo "overlays/dev already at $TAG, nothing to commit"
+            exit 0
+          fi
+          BOT_ID=$(gh api "/users/${APP_SLUG}[bot]" --jq .id)
+          git config user.name "${APP_SLUG}[bot]"
+          git config user.email "${BOT_ID}+${APP_SLUG}[bot]@users.noreply.github.com"
+          git commit -am "dev: calculator ${TAG}" \
+            -m "Image: ${IMAGE_REF}" \
+            -m "Source: ${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}" \
+            -m "Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          # Another run may have pushed first; replay this one-line change on top
+          for attempt in 1 2 3; do
+            git push && exit 0
+            git pull --rebase
+          done
+          exit 1

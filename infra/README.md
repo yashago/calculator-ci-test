@@ -1,15 +1,17 @@
 # Infrastructure
 
 Terraform for the calculator platform in `il-central-1`: VPC, EKS, ECR, the GitHub OIDC role
-for CI, and the cluster add-ons (AWS Load Balancer Controller, Argo CD, Argo Rollouts,
-kube-prometheus-stack).
+for CI, the cluster add-ons (AWS Load Balancer Controller, Argo CD, Argo Rollouts,
+kube-prometheus-stack, metrics-server), and the Argo CD root app that syncs
+[calculator-gitops](https://github.com/yashago/calculator-gitops).
 
 | Directory | What | State |
 |---|---|---|
 | `bootstrap/` | S3 bucket for Terraform state | local, run once per account |
 | `terraform/` | everything else | S3 (`calculator/terraform.tfstate`) |
 
-**Cost:** about $0.25–0.30/hour while up (EKS control plane, 2× t3.medium, NAT gateway).
+**Cost:** about $0.30–0.35/hour while up (EKS control plane, 2× t3.medium, NAT gateway,
+one ALB per environment).
 Destroy after each session.
 
 ## Prerequisites
@@ -59,7 +61,17 @@ terraform apply
 
 ## Teardown
 
+The ALBs are created by the AWS Load Balancer Controller from the Ingresses, not by
+Terraform, so remove the apps first. Otherwise `destroy` hangs on the VPC.
+
 ```sh
+# 1. Cascade-delete the apps: root → calculator-dev/prod → Ingresses → ALBs
+kubectl -n argocd delete application root --wait=true
+
+# 2. Confirm no ALBs are left (empty output)
+aws elbv2 describe-load-balancers --region il-central-1 --query "LoadBalancers[].LoadBalancerName" --output text
+
+# 3. Destroy the rest
 cd infra/terraform
 terraform destroy
 ```

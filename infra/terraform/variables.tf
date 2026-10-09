@@ -19,6 +19,12 @@ variable "github_repo" {
   default     = "yashago@8012182/calculator-ci-test@1401694108"
 }
 
+variable "gitops_repo_url" {
+  description = "Repo Argo CD syncs from (apps/ folder holds the environment Applications)"
+  type        = string
+  default     = "https://github.com/yashago/calculator-gitops.git"
+}
+
 variable "kubernetes_version" {
   type    = string
   default = "1.37"
