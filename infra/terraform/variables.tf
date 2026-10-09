@@ -10,9 +10,13 @@ variable "name" {
 }
 
 variable "github_repo" {
-  description = "owner/repo allowed to push images via GitHub OIDC"
+  description = <<-EOT
+    Repo allowed to push images via GitHub OIDC, as it appears in the token's sub claim.
+    This repo uses GitHub's immutable-ID format, owner@<owner id>/repo@<repo id>, which a
+    deleted-and-recreated repo with the same name cannot match.
+  EOT
   type        = string
-  default     = "yashago/calculator-ci-test"
+  default     = "yashago@8012182/calculator-ci-test@1401694108"
 }
 
 variable "kubernetes_version" {
