@@ -14,8 +14,11 @@ import org.springframework.web.bind.annotation.RestController;
 import com.yashago.calculator.service.CalculatorService;
 
 @RestController
-@RequestMapping("/api/v1")
+@RequestMapping("/api/v" + CalculatorController.API_VERSION)
 public class CalculatorController {
+
+    /** Version of the API contract; also the path segment, so the two can't drift apart. */
+    static final String API_VERSION = "1";
 
     private final Map<String, BinaryOperator<BigDecimal>> operations;
     private final String version;
@@ -38,7 +41,7 @@ public class CalculatorController {
         if (op == null) {
             throw new UnknownOperationException(operation);
         }
-        return new CalculationResult(operation, a, b, op.apply(a, b));
+        return new CalculationResult(operation, a, b, op.apply(a, b), API_VERSION);
     }
 
     @GetMapping("/version")
@@ -46,6 +49,7 @@ public class CalculatorController {
         return Map.of("version", version);
     }
 
-    public record CalculationResult(String operation, BigDecimal a, BigDecimal b, BigDecimal result) {
+    public record CalculationResult(String operation, BigDecimal a, BigDecimal b, BigDecimal result,
+                                    String version) {
     }
 }

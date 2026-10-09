@@ -26,7 +26,8 @@ class CalculatorControllerTest {
         mvc.perform(get("/api/v1/add").param("a", "2").param("b", "3"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.operation").value("add"))
-                .andExpect(jsonPath("$.result").value(5));
+                .andExpect(jsonPath("$.result").value(5))
+                .andExpect(jsonPath("$.version").value("1"));
     }
 
     @Test
