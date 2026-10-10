@@ -50,11 +50,17 @@ The next push to `main` publishes the image to ECR and signs it.
 
 ## Day to day
 
-```sh
-# Argo CD UI → https://localhost:8080 (user: admin)
-kubectl -n argocd port-forward svc/argocd-server 8080:443
-$(terraform output -raw argocd_password_command)
+Argo CD and the Argo Rollouts dashboard run inside EKS and have no public address.
+Open both through port-forward tunnels (PowerShell, from the repo root):
 
+```powershell
+powershell -ExecutionPolicy Bypass -File infra\dashboards.ps1
+# Argo Rollouts → http://localhost:3100/rollouts
+# Argo CD       → https://localhost:8080 (prints the admin password)
+# Ctrl+C closes both tunnels
+```
+
+```sh
 # Your IP changed → update admin_cidrs in terraform.tfvars, then
 terraform apply
 ```
