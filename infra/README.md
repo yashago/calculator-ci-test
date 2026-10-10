@@ -50,13 +50,14 @@ The next push to `main` publishes the image to ECR and signs it.
 
 ## Day to day
 
-Argo CD and the Argo Rollouts dashboard run inside EKS and have no public address.
+Argo CD, the Argo Rollouts dashboard and Grafana run inside EKS and have no public address.
 Open both through port-forward tunnels (PowerShell, from the repo root):
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File infra\dashboards.ps1
 # Argo Rollouts → http://localhost:3100/rollouts
 # Argo CD       → https://localhost:8080 (prints the admin password)
+# Grafana       → http://localhost:3000/d/calculator-overview (prints the admin password)
 # Ctrl+C closes both tunnels
 ```
 

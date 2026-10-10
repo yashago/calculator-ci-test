@@ -1,5 +1,5 @@
 # Opens the in-cluster dashboards on localhost through kubectl port-forward tunnels.
-# Argo CD and Argo Rollouts run in EKS; nothing here is exposed publicly.
+# Argo CD, Argo Rollouts and Grafana run in EKS; nothing here is exposed publicly.
 #
 #   .\infra\dashboards.ps1          # then Ctrl+C to close the tunnels
 #
@@ -12,6 +12,7 @@ $Region  = 'il-central-1'
 $Tunnels = @(
     @{ Name = 'Argo Rollouts'; Namespace = 'argo-rollouts'; Service = 'argo-rollouts-dashboard'; Ports = '3100:3100'; Url = 'http://localhost:3100/rollouts' }
     @{ Name = 'Argo CD';       Namespace = 'argocd';        Service = 'argocd-server';           Ports = '8080:443';  Url = 'https://localhost:8080' }
+    @{ Name = 'Grafana';       Namespace = 'monitoring';    Service = 'kube-prometheus-stack-grafana'; Ports = '3000:80'; Url = 'http://localhost:3000/d/calculator-overview' }
 )
 
 aws eks update-kubeconfig --name $Cluster --region $Region | Out-Null
@@ -19,6 +20,8 @@ if ($LASTEXITCODE -ne 0) { throw "Can't reach the cluster. Run 'aws login', and 
 
 $secret = kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' 2>$null
 $password = if ($secret) { [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($secret)) } else { '(initial secret not found; was the password changed?)' }
+$gsecret = kubectl -n monitoring get secret kube-prometheus-stack-grafana -o jsonpath='{.data.admin-password}' 2>$null
+$grafanaPassword = if ($gsecret) { [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($gsecret)) } else { '(secret not found)' }
 
 $jobs = foreach ($t in $Tunnels) {
     Start-Job -Name $t.Name -ScriptBlock {
@@ -45,6 +48,7 @@ try {
     }
     Write-Host ""
     Write-Host "Argo CD login: admin / $password"
+    Write-Host "Grafana login: admin / $grafanaPassword"
     Write-Host "Argo CD uses a self-signed certificate: accept the browser warning once."
     Write-Host ""
     Write-Host "Tunnels are open. Press Ctrl+C to close them."
