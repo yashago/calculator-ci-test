@@ -15,7 +15,7 @@ import com.yashago.calculator.service.CalculatorService;
 
 @WebMvcTest(CalculatorController.class)
 @Import(CalculatorService.class)
-@TestPropertySource(properties = "app.version=sha-test123")
+@TestPropertySource(properties = {"app.version=sha-test123", "app.env=test"})
 class CalculatorControllerTest {
 
     @Autowired
@@ -27,7 +27,8 @@ class CalculatorControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.operation").value("add"))
                 .andExpect(jsonPath("$.result").value(5))
-                .andExpect(jsonPath("$.version").value("1"));
+                .andExpect(jsonPath("$.version").value("1"))
+                .andExpect(jsonPath("$.env").value("test"));
     }
 
     @Test

@@ -22,15 +22,18 @@ public class CalculatorController {
 
     private final Map<String, BinaryOperator<BigDecimal>> operations;
     private final String version;
+    private final String env;
 
     public CalculatorController(CalculatorService calculator,
-                                @Value("${app.version:dev}") String version) {
+                                @Value("${app.version:dev}") String version,
+                                @Value("${app.env:local}") String env) {
         this.operations = Map.of(
                 "add", calculator::add,
                 "subtract", calculator::subtract,
                 "multiply", calculator::multiply,
                 "divide", calculator::divide);
         this.version = version;
+        this.env = env;
     }
 
     @GetMapping("/{operation}")
@@ -41,7 +44,7 @@ public class CalculatorController {
         if (op == null) {
             throw new UnknownOperationException(operation);
         }
-        return new CalculationResult(operation, a, b, op.apply(a, b), API_VERSION);
+        return new CalculationResult(operation, a, b, op.apply(a, b), API_VERSION, env);
     }
 
     @GetMapping("/version")
@@ -50,6 +53,6 @@ public class CalculatorController {
     }
 
     public record CalculationResult(String operation, BigDecimal a, BigDecimal b, BigDecimal result,
-                                    String version) {
+                                    String version, String env) {
     }
 }

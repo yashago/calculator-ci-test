@@ -8,6 +8,8 @@ server:
 app:
   # Injected at deploy time (image tag); shown by /api/v1/version
   version: ${APP_VERSION:dev}
+  # Set per environment by the GitOps overlays (dev, prod); same image everywhere
+  env: ${APP_ENV:local}
 
 management:
   endpoints:
