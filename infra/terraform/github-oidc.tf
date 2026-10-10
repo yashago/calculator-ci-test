@@ -23,6 +23,19 @@ data "aws_iam_policy_document" "github_trust" {
       variable = "token.actions.githubusercontent.com:sub"
       values   = ["repo:${var.github_repo}:ref:refs/heads/main"]
     }
+    # Same repo by numeric ID, which survives renames and can't be reclaimed by a new repo
+    condition {
+      test     = "StringEquals"
+      variable = "token.actions.githubusercontent.com:repository_id"
+      values   = [var.github_repo_id]
+    }
+    # ...and only the shared pipeline at a release tag, not an edited copy of it in this repo.
+    # Both spellings of the same workflow: by name, and by name@id (GitHub's immutable form).
+    condition {
+      test     = "StringLike"
+      variable = "token.actions.githubusercontent.com:job_workflow_ref"
+      values   = [for w in var.shared_workflow_refs : "${w}@refs/tags/v*"]
+    }
   }
 }
 
